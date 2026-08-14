@@ -1,0 +1,25 @@
+{
+  "name": "sparkbox",
+  "version": "0.1.0",
+  "description": "X 收藏助手 - 监听 X 原生收藏按钮，抓取帖子并同步到 Supabase",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "test": "node --test \"test/**/*.test.js\"",
+    "db:migrate": "node scripts/migrate.mjs up",
+    "db:status": "node scripts/migrate.mjs status",
+    "db:verify": "node scripts/db-verify.mjs",
+    "server": "node server/index.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.58.0",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "jsdom": "^29.1.1"
+  }
+}

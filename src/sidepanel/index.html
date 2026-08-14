@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sparkbox 收藏库</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header>
+      <select id="folder" aria-label="选择文件夹"></select>
+      <button id="new-folder" type="button" title="新建文件夹" aria-label="新建文件夹">＋</button>
+      <button id="rename-folder" type="button" hidden>重命名</button>
+      <button id="del-folder" type="button" class="danger" hidden>删除</button>
+      <div id="progress" hidden></div>
+    </header>
+    <div id="banner" hidden></div>
+    <main id="list"></main>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>
