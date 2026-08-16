@@ -158,8 +158,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '127.0.0.1', async () => {
-  console.log(`Sparkbox API → http://127.0.0.1:${PORT}`);
+server.listen(PORT, '192.168.101.12', async () => {
+  console.log(`Sparkbox API → http://192.168.101.12:${PORT}`);
   try {
     const { rows } = await pool.query(
       `select

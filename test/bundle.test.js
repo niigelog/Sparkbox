@@ -17,12 +17,13 @@ before(async () => {
 });
 
 /** 起一个带 chrome stub 的页面，把打包产物注进去 */
-function boot(html, url = 'https://x.com/home') {
+function boot(html, url = 'https://x.com/home', { orphaned = false } = {}) {
   const dom = new JSDOM(`<body>${html}</body>`, { url, runScripts: 'outside-only' });
   const sent = [];
   const listeners = [];
-  dom.window.chrome = {
+  dom.window.chrome = orphaned ? {} : {
     runtime: {
+      id: 'fake-extension-id',
       lastError: null,
       sendMessage(msg, cb) {
         sent.push(msg);
@@ -136,6 +137,17 @@ describe('dist/content.js 打包产物', () => {
     const { dom, sent } = boot(broken + tweetWithButtons('like'));
     assert.doesNotThrow(() => clickPath(dom, 'like'));
     assert.equal(sent.length, 1, '身份读取失败不能连累收藏');
+  });
+
+  test('扩展上下文失效时给出可执行的提示，而不是抛未捕获异常', () => {
+    // 扩展被重新加载/自动更新后，页面里已注入的内容脚本会变成孤儿：
+    // chrome.runtime 消失，一碰就抛。这种情况必须明确告诉用户刷新页面。
+    const { dom, sent } = boot(tweetWithButtons('like'), 'https://x.com/home', { orphaned: true });
+    assert.doesNotThrow(() => clickPath(dom, 'like'), '不能抛未捕获异常');
+    assert.equal(sent.length, 0, '上下文已死，发不出去也不该假装发了');
+
+    const toast = dom.window.document.documentElement.querySelector('div[style*="2147483647"]');
+    assert.ok(toast, '应该弹出提示条');
   });
 
   test('点 bookmark → source 记为 bookmark', () => {

@@ -12,6 +12,43 @@ log('content script 已注入', location.href);
 const recent = new Map(); // tweetId -> 时间戳，防连点重复发送
 const DEDUPE_MS = 3000;
 
+/**
+ * 扩展上下文是否还活着。
+ *
+ * 扩展被重新加载或自动更新后，已经注入到页面里的内容脚本会变成「孤儿」：
+ * 代码还在跑，但 chrome.runtime 已经没了，一碰就抛
+ * "Cannot read properties of undefined (reading 'sendMessage')"。
+ * 内容脚本没法自救 —— 重新注入必须靠刷新页面，所以只能明确告诉用户。
+ */
+function extensionAlive() {
+  try {
+    return !!chrome?.runtime?.id;
+  } catch {
+    return false; // 有些 Chrome 版本是直接抛 "Extension context invalidated"
+  }
+}
+
+function warnStale() {
+  console.warn('[sparkbox] 扩展已重新加载，本页的内容脚本已失效');
+  showToast('插件已更新，请刷新本页后再收藏', 'error');
+}
+
+/** 统一走这里发消息，省得每处都写一遍上下文检查 */
+function sendToBackground(message, onResponse) {
+  if (!extensionAlive()) {
+    warnStale();
+    return false;
+  }
+  try {
+    chrome.runtime.sendMessage(message, onResponse);
+    return true;
+  } catch (e) {
+    // sendMessage 本身也可能同步抛（上下文正好在这一刻失效）
+    warnStale();
+    return false;
+  }
+}
+
 /** 把点击目标往上的 data-testid 链打出来，用于核对 X 真实的按钮标识 */
 function testidChain(target) {
   const chain = [];
@@ -59,14 +96,14 @@ document.addEventListener(
     }
     recent.set(post.tweetId, now);
 
-    chrome.runtime.sendMessage({ type: 'SAVE_POST', payload: { ...post, actor } }, (res) => {
-      // 没有本地缓存兜底了：失败就是真丢了，所以要让用户能立刻重点一次
-      const failed = (reason) => {
-        recent.delete(post.tweetId);
-        console.error('[sparkbox] 保存失败:', reason);
-        showToast(`保存失败：${reason}`, 'error');
-      };
+    // 没有本地缓存兜底了：失败就是真丢了，所以要让用户能立刻重点一次
+    const failed = (reason) => {
+      recent.delete(post.tweetId);
+      console.error('[sparkbox] 保存失败:', reason);
+      showToast(`保存失败：${reason}`, 'error');
+    };
 
+    const sent = sendToBackground({ type: 'SAVE_POST', payload: { ...post, actor } }, (res) => {
       if (chrome.runtime.lastError) {
         return failed('扩展后台未响应，去 chrome://extensions 刷新一下');
       }
@@ -75,6 +112,7 @@ document.addEventListener(
       log('已保存', res.tweetId);
       showToast('已收藏到信息箱');
     });
+    if (!sent) recent.delete(post.tweetId); // 刷新后还能立刻重点
   },
   true
 );
@@ -87,7 +125,7 @@ function handleCancel(hit) {
   log(`识别为撤销动作（来源 ${hit.source}）`, tweetId);
   recent.delete(tweetId); // 撤销后允许立刻重新存
 
-  chrome.runtime.sendMessage(
+  sendToBackground(
     { type: 'REMOVE_POST', payload: { tweetId, source: hit.source } },
     (res) => {
       if (chrome.runtime.lastError) {

@@ -64,7 +64,7 @@ const backends = [
         env: { ...process.env, PORT: String(port), APP_DEFAULT_USER_ID: userId },
         stdio: 'ignore',
       });
-      const up = await waitFor(`http://127.0.0.1:${port}/health`);
+      const up = await waitFor(`http://192.168.101.12:${port}/health`);
       return {
         up,
         async stop() {
@@ -104,7 +104,7 @@ for (const [i, backend] of backends.entries()) {
       handle = await backend.start(backend.port);
       if (!handle.up) return;
       // sink 在模块加载时读死 endpoint，换 query 拿独立实例
-      globalThis.__SYNC_ENDPOINT__ = `http://127.0.0.1:${backend.port}/api/posts`;
+      globalThis.__SYNC_ENDPOINT__ = `http://192.168.101.12:${backend.port}/api/posts`;
       sink = await import(`../src/background/sinks/local.js?backend=${i}`);
       ready = true;
     });
