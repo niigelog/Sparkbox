@@ -14,9 +14,12 @@ x-db-env: &db-env
   #   这里是「容器内部」连的地址，走 Docker 网络，用容器名
   APP_POSTGRES_HOST: ${PG_CONTAINER:-postgres-17}
   APP_POSTGRES_PORT: ${PG_CONTAINER_PORT:-5432}
-  APP_POSTGRES_DB: ${APP_POSTGRES_DB}
-  APP_POSTGRES_USER: ${APP_POSTGRES_USER}
-  APP_POSTGRES_PASSWORD: ${APP_POSTGRES_PASSWORD}
+  # :? 表示没配就让 compose 直接拒绝启动，并打印后面这句话。
+  # 不这样的话会起一个注定失败的容器，然后你在 logs 里看到一条
+  # 上一次运行留下的旧错误，很难判断到底改没改生效。
+  APP_POSTGRES_DB: ${APP_POSTGRES_DB:?请在 .env 里设置}
+  APP_POSTGRES_USER: ${APP_POSTGRES_USER:?请在 .env 里设置}
+  APP_POSTGRES_PASSWORD: ${APP_POSTGRES_PASSWORD:?请在 .env 里设置（.env.example 里这项是空的）}
 
 services:
   migrate:
