@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { cp, mkdir, rm } from 'node:fs/promises';
+import { cp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -48,8 +48,22 @@ const builds = [
   { ...common, entryPoints: ['src/sidepanel/index.js'], outfile: `${outdir}/sidepanel.js`, format: 'esm' },
 ];
 
+/**
+ * host_permissions 里的后端地址必须和 SYNC_ENDPOINT 一致，否则请求会被 CORS 挡掉。
+ * 手写两处必然会漂移 —— 直接从 endpoint 推导出来。
+ */
+async function writeManifest() {
+  const manifest = JSON.parse(await readFile('src/manifest.json', 'utf8'));
+  const fixed = ['https://x.com/*', 'https://twitter.com/*'];
+  const extra = [];
+  if (target === 'local') extra.push(`${new URL(process.env.SYNC_ENDPOINT).origin}/*`);
+  else extra.push('https://*.supabase.co/*');
+  manifest.host_permissions = [...new Set([...fixed, ...extra])];
+  await writeFile(`${outdir}/manifest.json`, JSON.stringify(manifest, null, 2) + '\n');
+  return manifest.host_permissions;
+}
+
 async function copyStatic() {
-  await cp('src/manifest.json', `${outdir}/manifest.json`);
   await cp('src/sidepanel/index.html', `${outdir}/sidepanel.html`);
   await cp('src/sidepanel/index.css', `${outdir}/sidepanel.css`);
 }
@@ -57,6 +71,7 @@ async function copyStatic() {
 await rm(outdir, { recursive: true, force: true });
 await mkdir(outdir, { recursive: true });
 await copyStatic();
+const hosts = await writeManifest();
 
 if (watch) {
   const ctxs = await Promise.all(builds.map((b) => esbuild.context(b)));
@@ -67,6 +82,7 @@ if (watch) {
   console.log(
     `\n构建完成 → ${outdir}/  同步目标: ${target}` +
       (target === 'local' ? ` → ${process.env.SYNC_ENDPOINT}` : '') +
+      `\nhost_permissions: ${hosts.join('  ')}` +
       `\n（chrome://extensions 里「加载已解压的扩展程序」选这个目录）`
   );
 }

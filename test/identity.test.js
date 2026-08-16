@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto';
 if (existsSync('.env')) process.loadEnvFile('.env');
 
 const PORT = 7415;
-const BASE = `http://192.168.101.12:${PORT}`;
+const BASE = `http://127.0.0.1:${PORT}`;
 // 用一个绝不会和真实 X 账号撞上的号段
 const XID_A = `999${Date.now()}1`;
 const XID_B = `999${Date.now()}2`;

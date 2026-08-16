@@ -1,7 +1,7 @@
 import { identityHeaders } from '../../shared/identity.js';
 
-const ENDPOINT = __SYNC_ENDPOINT__; // 形如 http://192.168.101.12:7000/api/posts
-const BASE = ENDPOINT.replace(/\/posts\/?$/, ''); // → http://192.168.101.12:7000/api
+const ENDPOINT = __SYNC_ENDPOINT__; // 构建时注入，形如 http://192.168.101.12:7000/api/posts
+const BASE = ENDPOINT.replace(/\/posts\/?$/, ''); // → 同源的 /api 前缀
 
 // 内容脚本从页面上读到的 handle / 显示名，只是给人看的附加信息
 let actorHint = {};

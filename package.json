@@ -15,10 +15,10 @@
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.58.0",
     "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.58.0",
     "esbuild": "^0.25.0",
     "jsdom": "^29.1.1"
   }

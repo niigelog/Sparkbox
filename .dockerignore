@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.env
+test
+src
+build.mjs
+scripts/smoke.mjs
+scripts/db-verify.mjs
+*.md
+.claude

@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 if (existsSync('.env')) process.loadEnvFile('.env');
 
 const PORT = 7412;
-const BASE = `http://192.168.101.12:${PORT}`;
+const BASE = `http://127.0.0.1:${PORT}`;
 const TEST_USER = randomUUID();
 let proc;
 let available = false;

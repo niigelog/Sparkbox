@@ -30,10 +30,10 @@ before(async () => {
       res.end(respond.body);
     });
   });
-  await new Promise((r) => server.listen(0, '192.168.101.12', r));
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
 
   // 模拟 esbuild 的构建时注入
-  globalThis.__SYNC_ENDPOINT__ = `http://192.168.101.12:${server.address().port}/api/posts`;
+  globalThis.__SYNC_ENDPOINT__ = `http://127.0.0.1:${server.address().port}/api/posts`;
   ({ pushPost } = await import('../src/background/sinks/local.js'));
 });
 
@@ -85,7 +85,7 @@ describe('local sink', () => {
   test('服务没起来时报 Failed to fetch（queue 认这个前缀中断本轮）', async () => {
     const saved = globalThis.__SYNC_ENDPOINT__;
     // ENDPOINT 在模块加载时就读死了，换 query 拿一份新的模块实例
-    globalThis.__SYNC_ENDPOINT__ = 'http://192.168.101.12:1/api/posts'; // 确定没人监听
+    globalThis.__SYNC_ENDPOINT__ = 'http://127.0.0.1:1/api/posts'; // 确定没人监听
     const { pushPost: deadPush } = await import('../src/background/sinks/local.js?v=dead');
     globalThis.__SYNC_ENDPOINT__ = saved;
 

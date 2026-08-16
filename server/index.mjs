@@ -10,6 +10,7 @@ import * as repo from './repo.mjs';
 import { currentUser } from './identity.mjs';
 
 const PORT = Number(process.env.PORT ?? 7000);
+const HOST = process.env.HOST ?? '127.0.0.1';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const json = (res, status, data) => {
@@ -158,8 +159,11 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '192.168.101.12', async () => {
-  console.log(`Sparkbox API → http://192.168.101.12:${PORT}`);
+// 绑定地址永远由环境决定，不写死：
+//   本机开发 127.0.0.1（只有自己能访问）
+//   容器里必须 0.0.0.0，否则宿主机的端口映射进不来
+server.listen(PORT, HOST, async () => {
+  console.log(`Sparkbox API → http://${HOST}:${PORT}`);
   try {
     const { rows } = await pool.query(
       `select

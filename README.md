@@ -4,7 +4,7 @@ X 收藏助手 —— 在 X 上点 ❤️ 时自动抓取帖子，直接写进 P
 
 **没有本地缓存层。** 点击 → 内容脚本抓取 → Service Worker 直接 POST 后端 → 成败如实反馈到页面上的提示条。侧边栏也直接读后端接口，不经过 Service Worker。
 
-代价说在前面：**后端没启动时，这次点击会丢**（会弹一条明确的红色提示，并且允许你立刻重点一次）。换来的是链路上少一个会坏的环节 —— 之前的 IndexedDB 发件箱连续制造过两次故障（版本号错配导致收藏全线失败、`get` 未命中时返回 IDBRequest 而非 undefined）。后端在 192.168.101.12，真正的失败场景基本只有"忘了启动服务"。
+代价说在前面：**后端没启动时，这次点击会丢**（会弹一条明确的红色提示，并且允许你立刻重点一次）。换来的是链路上少一个会坏的环节 —— 之前的 IndexedDB 发件箱连续制造过两次故障（版本号错配导致收藏全线失败、`get` 未命中时返回 IDBRequest 而非 undefined）。后端在本地网络里，真正的失败场景基本只有"忘了启动服务"。
 
 完整产品方案见 [X收藏插件-开发方案.md](X收藏插件-开发方案.md)。
 
@@ -22,14 +22,50 @@ npm run build
 
 **改完扩展一定要同时刷新 x.com 标签页。** 扩展重新加载后，页面里已经注入的内容脚本会变成「孤儿」——代码还在跑，但 `chrome.runtime` 已经没了，点收藏会直接失败。现在这种情况会弹出「插件已更新，请刷新本页后再收藏」，不会再是一个看不懂的 `Cannot read properties of undefined`。
 
-### 起后端
+### 起后端（Docker Compose）
+
+```bash
+docker compose up -d
+```
+
+复用已有的 Postgres 容器，通过它所在的自定义网络用**容器名**直连，不依赖数据库把 5432 发布到宿主机。
+
+只有两个服务，顺序由退出状态串起来，**api 永远不会连上一个表结构没就绪的库**：
+
+```
+migrate 跑完并成功退出  →  api 启动
+```
+
+迁移做成独立的一次性服务，不塞进 api 的启动脚本 —— 失败时能单独看日志，也不会因为迁移出错导致 api 反复重启。改完后端代码重新部署用 `docker compose up -d --build`。
+
+网络和容器名在 `.env` 里配：
+
+```
+PG_NETWORK=local-db-stack_db_net    # compose 只加入，不创建
+PG_CONTAINER=postgres-17
+```
+
+网络名对不上会直接报 `network ... not found`，查一下：
+
+```bash
+docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' postgres-17
+```
+
+**注意 `.env` 里有两个数据库地址，它们不是一回事**：
+
+| 变量 | 谁在用 | 值 |
+|---|---|---|
+| `APP_POSTGRES_HOST` | 宿主机上的 `npm test` / `npm run db:migrate` | IP，如 `192.168.101.12` |
+| `PG_CONTAINER` | 容器内部，走 Docker 网络 | 容器名，如 `postgres-17` |
+
+不用 Docker 直接跑也行：
 
 ```bash
 npm run db:migrate   # 首次：建表
-npm run server       # 起 API，监听 192.168.101.12:7000
+npm run server       # 起 API，默认监听 127.0.0.1:7000
 ```
 
-数据落 Postgres。<http://192.168.101.12:7000/health> 是健康检查，<http://192.168.101.12:7000/api/posts> 能直接看全部数据。
+**监听地址由 `HOST` 环境变量决定，代码里没写死任何 IP** —— 本机开发默认 `127.0.0.1`，容器里 compose 设成 `0.0.0.0`（否则端口映射进不来）。容器往宿主机映射的地址由 `.env` 的 `API_BIND` 控制。
 
 ```bash
 npm test     # 全部测试
@@ -85,7 +121,9 @@ npm run smoke   # 全链路冒烟：模拟点一次 ❤️ 一路走到数据库
 ## 目录结构
 
 ```
-build.mjs                 esbuild 打包；按 SYNC_TARGET 把 #sink 指向对应实现
+build.mjs                 esbuild 打包；host_permissions 按 SYNC_ENDPOINT 自动生成
+Dockerfile                后端镜像（只含 server + 迁移）
+docker-compose.yml        migrate + api，加入已有 Postgres 容器的网络
 server/
   index.mjs               API 服务（HTTP 路由、参数校验）
   repo.mjs                SQL，所有查询按 user_id 隔离
@@ -108,7 +146,7 @@ src/content/
   trigger.js              like/bookmark → 存，unlike/removeBookmark → 撤销
   extract.js              帖子内容提取
   toast.js                Shadow DOM 轻提示
-src/sidepanel/            文件夹树 UI
+src/sidepanel/            文件夹下拉 + 列表 UI
 test/                     jsdom 单测 + 真实 HTTP 服务测试
 supabase/schema.sql
 ```
@@ -123,15 +161,30 @@ supabase/schema.sql
 4. **提取要先排掉引用推文。** 引用推被包在 article 内的 `div[role="link"]` 里，直接 `querySelector` 会抓到引用推的正文和作者。
 5. **Supabase 模式下必须换 session storage adapter。** SDK 默认写 `localStorage`，Service Worker 里没有这个对象。同时 `autoRefreshToken` 必须关掉——它靠 `setInterval` 续期，SW 一休眠计时器就没了，醒来后拿着过期 token 静默失败。改成每次调用前手动检查过期时间。
 
-## 安全边界
+## 部署与安全边界
+
+接口**没有任何鉴权**。身份靠插件读 X 的 `twid` cookie 报上来，服务端无法验证真假 —— 这是识别不是认证。
+
+所以监听地址直接决定了风险等级：
+
+| `API_BIND` | 谁能访问 | 结论 |
+|---|---|---|
+| `127.0.0.1`（默认） | 只有后端所在那台机器 | 安全 |
+| `0.0.0.0` | **同局域网的任何人** | 等于把全部收藏公开读写 |
+
+要把插件装在别的电脑上、后端跑在 `192.168.101.12`，就必须改成 `0.0.0.0`。**在那之前先接 X OAuth**，让服务端真的验证身份，否则同网段任何人都能读走、改掉、删光你的收藏库。
+
+数据库端口默认不映射到宿主机（compose 里那两行是注释掉的）。开发机要跑 `npm test` / `npm run db:migrate` 连容器里的库时才需要打开，同样注意口令上局域网的后果。
+
+### 其他安全边界
 
 Supabase 模式下，anon key 和默认账户密码是**明文打包进 `dist/` 的**，任何人解压插件就能拿到完整读写权限。RLS 在这里不提供任何保护——所有数据都属于同一个 `user_id`。**在换成真实 OAuth 登录之前，这个插件只能自用，不能上架、不能分发给第二个人。**
 
-本地模式没有这个问题（接口在 192.168.101.12，不出本机），但同样意味着换台机器数据就没了。
+自建后端模式下这个问题不存在（`dist/` 里只有后端地址，没有任何凭据）。
 
 ## 当前状态
 
-已验证：64 条测试全过。覆盖打包产物的端到端点击流程、以及连真实数据库跑的 HTTP 接口测试和客户端字段映射契约测试。全链路冒烟（`npm run smoke`）从模拟点赞一路验到 Postgres 再读回来，通畅。
+已验证：79 条测试全过。覆盖打包产物的端到端点击流程、以及连真实数据库跑的 HTTP 接口测试和客户端字段映射契约测试。全链路冒烟（`npm run smoke`）从模拟点赞一路验到 Postgres 再读回来，通畅。
 
 **抓取质量已在真实 x.com 数据上核对过**：作者名/handle 正确拆分、emoji 保留、配图不混入头像、`posted_at` 是原帖时间。
 

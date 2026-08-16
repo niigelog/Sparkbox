@@ -11,7 +11,7 @@ import { existsSync } from 'node:fs';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
 
-const ENDPOINT = process.env.SYNC_ENDPOINT ?? 'http://192.168.101.12:7000/api/posts';
+const ENDPOINT = process.env.SYNC_ENDPOINT ?? 'http://127.0.0.1:7000/api/posts';
 const BASE = ENDPOINT.replace(/\/posts\/?$/, '');
 globalThis.__SYNC_ENDPOINT__ = ENDPOINT;
 

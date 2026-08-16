@@ -1,0 +1,62 @@
+# Sparkbox 后端：迁移 + API。
+#
+#   docker compose up -d
+#
+# 复用已有的 Postgres 容器，通过它所在的自定义网络用**容器名**直连，
+# 不依赖数据库把 5432 发布到宿主机。
+#
+# 启动顺序由退出状态串起来：migrate 跑完并成功退出 → api 才启动，
+# 所以 api 永远不会连上一个表结构没就绪的库。
+
+x-db-env: &db-env
+  # 注意这里和 .env 里的 APP_POSTGRES_HOST 不是一回事：
+  #   .env 里那个是「在宿主机/开发机上跑 npm test、npm run db:migrate」时连的地址（IP）
+  #   这里是「容器内部」连的地址，走 Docker 网络，用容器名
+  APP_POSTGRES_HOST: ${PG_CONTAINER:-postgres-17}
+  APP_POSTGRES_PORT: ${PG_CONTAINER_PORT:-5432}
+  APP_POSTGRES_DB: ${APP_POSTGRES_DB}
+  APP_POSTGRES_USER: ${APP_POSTGRES_USER}
+  APP_POSTGRES_PASSWORD: ${APP_POSTGRES_PASSWORD}
+
+services:
+  migrate:
+    build: .
+    command: ['node', 'scripts/migrate.mjs', 'up']
+    environment: *db-env
+    networks: [db_net]
+    restart: 'no' # 一次性任务，跑完就该退出
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *db-env
+      HOST: 0.0.0.0 # 容器里必须绑 0.0.0.0，否则端口映射进不来
+      PORT: 7000
+      APP_DEFAULT_USER_ID: ${APP_DEFAULT_USER_ID:-00000000-0000-0000-0000-000000000001}
+    networks: [db_net]
+    ports:
+      # 左边是宿主机监听地址。改成 0.0.0.0 会让同局域网的任何人都能
+      # 读写全部收藏 —— 接口目前没有任何鉴权。详见 README「部署与安全边界」。
+      - '${API_BIND:-127.0.0.1}:7000:7000'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:7000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+networks:
+  # 数据库容器已经在的那个网络，compose 只是加入，不负责创建。
+  # 网络名对不上会直接报 "network ... not found"，查一下：
+  #   docker inspect -f '{{range $$k,$$v := .NetworkSettings.Networks}}{{$$k}} {{end}}' postgres-17
+  db_net:
+    external: true
+    name: ${PG_NETWORK:-local-db-stack_db_net}
